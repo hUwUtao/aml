@@ -1,7 +1,21 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-import { parseJapaneseLyric } from "../.build/src/kana.js";
-import { finalize, plan, tickTo100ns } from "../.build/src/implementation.js";
+import { expect, test } from "bun:test";
+import { parseJapaneseLyric } from "../src/kana.ts";
+import { finalize, plan, tickTo100ns } from "../src/implementation.ts";
+
+const assert = {
+  deepEqual(actual, expected) {
+    expect(actual).toEqual(expected);
+  },
+  equal(actual, expected) {
+    expect(actual).toBe(expected);
+  },
+  ok(value) {
+    expect(value).toBeTruthy();
+  },
+  throws(fn, pattern) {
+    expect(fn).toThrow(pattern);
+  },
+};
 
 function phones(raw) {
   return parseJapaneseLyric(raw).flatMap((m) => m.phones);
@@ -71,8 +85,8 @@ test("vowel anchoring moves next consonant before note boundary", () => {
   const n2 = p.phones.filter((x) => x.ownerId === "n2");
   assert.equal(n2[0].phone, "n");
   assert.equal(n2[1].phone, "a");
-  assert.ok(n2[0].start100ns < note2Start);
-  assert.equal(n2[1].start100ns, note2Start);
+  assert.ok(n2[0].start < note2Start);
+  assert.equal(n2[1].start, note2Start);
   assert.equal(n2[0].id, "note:n2:phone:0");
   assert.equal(n2[1].id, "note:n2:phone:1");
 });
@@ -84,8 +98,8 @@ test("anchoring off keeps consonant at note boundary and delays vowel", () => {
   if ("kind" in p) return;
   const note2Start = tickTo100ns(t, 480);
   const n2 = p.phones.filter((x) => x.ownerId === "n2");
-  assert.equal(n2[0].start100ns, note2Start);
-  assert.ok(n2[1].start100ns > note2Start);
+  assert.equal(n2[0].start, note2Start);
+  assert.ok(n2[1].start > note2Start);
 });
 
 test("finalize applies boundary edit by stable phone id", () => {
@@ -94,11 +108,11 @@ test("finalize applies boundary edit by stable phone id", () => {
   assert.ok(!("kind" in p));
   if ("kind" in p) return;
   const target = p.phones.find((x) => x.id === "note:n2:phone:0");
-  const before = target.start100ns;
+  const before = target.start;
   const score = finalize(p, [{ phoneId: target.id, boundaryOffset100ns: 20_000 }]);
   assert.equal(score.kind, "neutrino_sinsy_v1");
   const row = score.rows.find((x) => x.sourcePhoneId === target.id);
-  assert.equal(row.start100ns, before + 20_000);
+  assert.equal(row.start, before + 20_000);
   assert.equal(score.kind, "neutrino_sinsy_v1");
 });
 
@@ -121,7 +135,7 @@ test("explicit gap survives plan/finalize as a gap row", () => {
   const score = finalize(p);
   assert.equal(score.kind, "neutrino_sinsy_v1");
   assert.equal(score.rows.at(-1).gapId, "g1");
-  assert.equal(score.rows.at(-1).contexts.p[0], "p");
+  assert.equal(score.rows.at(-1).contexts, undefined);
 });
 
 test("unsupported mora fails instead of guessing", () => {

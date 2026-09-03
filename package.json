@@ -1,21 +1,22 @@
 {
-  "name": "amadeus-lang-ja-portable",
-  "version": "0.1.0",
+  "name": "aml",
   "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
   "type": "module",
-  "description": "Portable deterministic Japanese CV/VCV/CVVC language plugin for Amadeus Studio",
+  "module": "index.ts",
   "scripts": {
-    "test": "rm -rf .build && tsc -p tsconfig.core.json && node --test test/core.test.mjs",
-    "check": "tsc -p tsconfig.json",
-    "build": "node scripts/build.mjs",
-    "release": "npm test && npm run check && npm run build"
-  },
-  "dependencies": {
-    "@amsvs/api": "1.1.0"
+    "test": "bun run --workspaces test",
+    "check": "bun run --workspaces check",
+    "build": "bunx --bun tsdown --config tsdown.config.mts",
+    "release": "bun run test && bun run check && bun run build && bun run pages",
+    "pages": "bun scripts/publish-pages.ts"
   },
   "devDependencies": {
-    "@types/node": "^26.4.1",
-    "esbuild": "^0.28.2",
+    "@types/bun": "^1.4.0",
+    "oxfmt": "^0.66.0",
+    "tsdown": "0.22.14",
     "typescript": "^7.0.2"
   }
 }

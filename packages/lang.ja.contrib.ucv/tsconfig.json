@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["@amsvs/api"]
+  },
+  "include": ["src/**/*.ts"]
+}

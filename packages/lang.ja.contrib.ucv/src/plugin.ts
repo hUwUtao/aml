@@ -1,9 +1,22 @@
 import { param, plugin } from "@amsvs/api";
-import { finalize as finalizeJa, plan as planJa, PLUGIN_ID, PLUGIN_VERSION } from "./implementation.js";
-import type { AuthoredTrack, EngineScore, PhonePlan, PlannerOptions, PluginError, TimingEdit } from "./types.js";
+import {
+  finalize as finalizeJa,
+  plan as planJa,
+  PLUGIN_ID,
+  PLUGIN_VERSION,
+} from "./implementation";
+import type { EngineScore, PhonePlan } from "@amsvs/api";
+import type { PlannerOptions, PluginError } from "./implementation";
 
 function isError(value: unknown): value is PluginError {
-  return typeof value === "object" && value !== null && "kind" in value && ["unsupported", "malformed", "incompatible_schema", "runtime"].includes(String((value as PluginError).kind));
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "kind" in value &&
+    ["unsupported", "malformed", "incompatible_schema", "runtime"].includes(
+      String((value as PluginError).kind),
+    )
+  );
 }
 
 function unwrapPlan(value: PhonePlan | PluginError): PhonePlan {
@@ -46,10 +59,10 @@ plugin(PLUGIN_ID)
         vowelAnchoring: Boolean(this.params.vowelAnchoring ?? true),
         consonantLeadMs: Number(this.params.consonantLeadMs ?? 70),
       };
-      return unwrapPlan(planJa(track as AuthoredTrack, options));
+      return unwrapPlan(planJa(track, options));
     },
     finalize(plan, timingEdits) {
-      return unwrapScore(finalizeJa(plan as PhonePlan, (timingEdits ?? []) as TimingEdit[]));
+      return unwrapScore(finalizeJa(plan, timingEdits));
     },
   })
   .register();

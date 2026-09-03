@@ -1,0 +1,12 @@
+{
+  "name": "lang.ja.contrib.ucv",
+  "pluginId": "lang.ja.contrib.ucv",
+  "pluginName": "Japanese portable CV/VCV/CVVC",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Portable deterministic Japanese CV/VCV/CVVC language plugin for Amadeus Studio",
+  "type": "module",
+  "dependencies": {
+    "@amsvs/api": "1.3.4"
+  }
+}
