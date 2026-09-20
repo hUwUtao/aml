@@ -62,6 +62,13 @@ test("OpenUtau VCV prefix is syntax-normalized", () => {
   assert.deepEqual(phones("* た"), ["t", "a"]);
 });
 
+test("romanized monographs, digraphs, and trigraphs are accepted", () => {
+  assert.deepEqual(phones("ka"), ["k", "a"]);
+  assert.deepEqual(phones("SHI"), ["sh", "i"]);
+  assert.deepEqual(phones("kya"), ["ky", "a"]);
+  assert.deepEqual(phones("konnichiwa"), ["k", "o", "N", "n", "i", "ch", "i", "w", "a"]);
+});
+
 test("explicit canonical CVVC fragment is retained", () => {
   assert.deepEqual(phones("a k"), ["a", "k"]);
   assert.deepEqual(phones("k a"), ["k", "a"]);
