@@ -8,7 +8,7 @@
   "module": "index.ts",
   "scripts": {
     "test": "bun test packages",
-    "check": "tsc -p packages/lang.ja.contrib.ucv/tsconfig.json",
+    "check": "tsc -p packages/lang.ja.contrib.ucv/tsconfig.json && tsc -p packages/import.ust/tsconfig.json && tsc -p packages/import.cevio/tsconfig.json && tsc -p packages/import.svp/tsconfig.json",
     "build": "bunx --bun tsdown --config tsdown.config.mts",
     "release": "bun run test && bun run check && bun run build && bun run pages",
     "pages": "bun scripts/publish-pages.ts"

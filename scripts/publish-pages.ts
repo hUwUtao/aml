@@ -11,6 +11,7 @@ const published = [];
 
 for (const packageFile of packageFiles.sort()) {
   const packageJson = await Bun.file(`${root}/${packageFile}`).json();
+  if (packageJson.utility === true) continue;
   const pluginId = packageJson.pluginId;
   if (typeof pluginId !== "string" || !pluginId) {
     throw new Error(`${packageFile}: pluginId is required`);

@@ -1,0 +1,16 @@
+{
+  "name": "import.cevio",
+  "pluginId": "import.cevio",
+  "pluginName": "CeVIO score importer",
+  "pluginRole": "hook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Imports CeVIO CCS projects and CCST tracks",
+  "type": "module",
+  "dependencies": {
+    "@amsvs/api": "1.3.4",
+    "@aml/import-common": "workspace:*",
+    "encoding-japanese": "^2.4.0",
+    "fast-xml-parser": "^5.2.5"
+  }
+}

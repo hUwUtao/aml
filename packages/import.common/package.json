@@ -1,0 +1,13 @@
+{
+  "name": "@aml/import-common",
+  "private": true,
+  "utility": true,
+  "type": "module",
+  "types": "./src/shared.ts",
+  "exports": {
+    ".": "./src/shared.ts"
+  },
+  "dependencies": {
+    "@amsvs/api": "1.3.4"
+  }
+}

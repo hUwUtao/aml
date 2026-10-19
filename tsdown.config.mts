@@ -3,10 +3,11 @@ const packageFiles = await Array.fromAsync(
   new Bun.Glob("packages/*/package.json").scan({ cwd: root }),
 );
 
-export default await Promise.all(
+const configs = await Promise.all(
   packageFiles.sort().map(async (packageFile) => {
     const packageRoot = `${root}/${packageFile.slice(0, -"/package.json".length)}`;
     const packageJson = await Bun.file(`${root}/${packageFile}`).json();
+    if (packageJson.utility === true) return null;
     const pluginId = packageJson.pluginId;
     if (typeof pluginId !== "string" || !pluginId) {
       throw new Error(`${packageFile}: pluginId is required`);
@@ -23,14 +24,14 @@ export default await Promise.all(
       outDir: outputRoot,
       clean: true,
       deps: {
-        alwaysBundle: ["@amsvs/api"],
+        alwaysBundle: Object.keys(packageJson.dependencies ?? {}),
         onlyBundle: false,
       },
       hooks: {
         async "build:done"() {
           const output = `${outputRoot}/plugin.iife.js`;
           const code = await Bun.file(output).text();
-          if (/\bimport\s+|\bexport\s+|\b(?:Bun\.|node:)/.test(code)) {
+          if (/(^|[;\n])\s*(?:import|export)\s|\bBun\.(?:file|write|Glob|env|spawn)\s*\(|\brequire\s*\(/.test(code)) {
             throw new Error(`${packageFile}: bundle is not QuickJS/self-contained`);
           }
           const digest = await crypto.subtle.digest(
@@ -40,12 +41,13 @@ export default await Promise.all(
           const sha256 = [...new Uint8Array(digest)]
             .map((byte) => byte.toString(16).padStart(2, "0"))
             .join("");
+          const role = packageJson.pluginRole ?? "language";
           const manifest = `#
 protocol = "amadeus.plugin/v1"
 id = "${pluginId}"
 version = "${packageJson.version}"
 name = "${packageJson.pluginName ?? packageJson.name}"
-role = "language"
+role = "${role}"
 runtime = "quickjs"
 entry = "plugin.iife.js"
 sha256 = "${sha256}"
@@ -58,3 +60,5 @@ order = 10
     };
   }),
 );
+
+export default configs.filter((config) => config !== null);
