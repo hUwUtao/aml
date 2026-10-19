@@ -12,7 +12,7 @@ export interface Mora { source: string; phones: string[]; }
 
 const BASIC: Record<string, string[]> = {};
 const add = (rows: string, phone: string) => {
-  for (const [kana, vowel] of rows.split(" ").map((x) => x.split(":"))) {
+  for (const [kana, vowel] of rows.split(" ").map((x) => x.split(":") as [string, string])) {
     BASIC[kana] = phone ? [phone, vowel] : [vowel];
   }
 };
