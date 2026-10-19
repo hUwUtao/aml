@@ -63,7 +63,7 @@ const DIGRAPH: Record<string, string[]> = {
 
 // Values are canonical phones; the longest-match parser also accepts compact words.
 const ROMAJI: Record<string, string[]> = {
-  a:["a"], i:["i"], u:["u"], e:["e"], o:["o"], n:["N"], nn:["N"], "n'":["N"],
+  a:["a"], i:["i"], u:["u"], e:["e"], o:["o"], n:["N"], "n'":["N"],
   ka:["k","a"],ki:["k","i"],ku:["k","u"],ke:["k","e"],ko:["k","o"],
   ga:["g","a"],gi:["g","i"],gu:["g","u"],ge:["g","e"],go:["g","o"],
   sa:["s","a"],si:["sh","i"],shi:["sh","i"],su:["s","u"],se:["s","e"],so:["s","o"],
@@ -109,6 +109,10 @@ function parseRomanizedToken(token: string): string[] | null {
   const visit = (offset: number): string[] | null => {
     if (offset === input.length) return [];
     if (memo.has(offset)) return memo.get(offset)!;
+    if (input.slice(offset) === "nn") {
+      memo.set(offset, ["N"]);
+      return ["N"];
+    }
     const candidates = Object.keys(ROMAJI).filter((x) => input.startsWith(x, offset)).sort((a, b) => b.length - a.length);
     for (const candidate of candidates) {
       const tail = visit(offset + candidate.length);
