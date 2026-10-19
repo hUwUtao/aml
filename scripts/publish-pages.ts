@@ -37,7 +37,7 @@ for (const packageFile of packageFiles.sort()) {
 
 await Bun.write(
   `${siteDir}/index.html`,
-  `<!doctype html><meta charset="utf-8"><title>Amadeus language plugins</title><h1>Amadeus language plugins</h1><ul>${published.map((item) => `<li><a href="${item.path}">${item.name}</a> ${item.version}</li>`).join("")}</ul>`,
+  `<!doctype html><meta charset="utf-8"><title>Amadeus plugins</title><h1>Amadeus plugins</h1><ul>${published.map((item) => `<li><a href="${item.path}">${item.name}</a> ${item.version}</li>`).join("")}</ul>`,
 );
 await Bun.write(`${siteDir}/plugins.json`, JSON.stringify(published, null, 2) + "\n");
 console.log(`published ${published.length} plugin(s) to site/`);

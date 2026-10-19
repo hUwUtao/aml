@@ -1,6 +1,6 @@
-# Amadeus language plugins
+# Amadeus plugins
 
-A contrib collection of language support for AMADEUS.
+A contrib hub for AMADEUS plugins, starting with language support.
 
 Feel free to PR your own implementation. However, this repo does not have a strict policy or quatest against agentic programming. This repo is not a limitation to how you can distribute your plugins.
 
