@@ -186,3 +186,52 @@ test("recovery still rejects malformed track structure", () => {
   t.notes[0].endTick = 0;
   assert.equal(plan(t).kind, "malformed");
 });
+
+
+test("expanded readings handle compounds and common inflected lyrics", () => {
+  for (const [word, reading] of [
+    ["木漏れ日と流れ星", "こもれびとながれぼし"],
+    ["夜明けの水平線", "よあけのすいへいせん"],
+    ["君を抱きしめて", "きみをだきしめて"],
+    ["明日も生きて", "あしたもいきて"],
+    ["歩いて帰った", "あるいてかえった"],
+    ["食べて飲んで笑った", "たべてのんでわらった"],
+    ["会いに行った", "あいにいった"],
+    ["来る来て来た来ない来よう", "くるきてきたこないこよう"],
+    ["出会えて良かった", "であえてよかった"],
+    ["人気のある人", "にんきのあるひと"],
+    ["上手に歌う", "じょうずにうたう"],
+    ["消えない気持ち", "きえないきもち"],
+  ]) assert.deepEqual(phones(word), phones(reading));
+});
+
+test("hyphen slurs repeat the preceding vowel across notes", () => {
+  assert.deepEqual(parseJapaneseLyric("-", "i"), [{ source: "-", phones: ["i"] }]);
+  const p = plan(track(["き", "-", "-", "な"]));
+  assert.ok(!("kind" in p));
+  if ("kind" in p) return;
+  assert.deepEqual(p.phones.map((p) => p.phone), ["k", "i", "i", "i", "n", "a"]);
+  assert.equal(p.diagnostics.length, 0);
+  const score = finalize(p);
+  assert.equal(score.kind, "neutrino_sinsy_v1");
+  assert.deepEqual(score.rows.filter((r) => r.noteId === "n2").map((r) => r.phoneme), ["i"]);
+});
+
+test("orphan hyphen slurs recover as pauses without crossing silence", () => {
+  assert.throws(() => parseJapaneseLyric("-"), /no previous vowel/);
+  for (const rest of ["pau", "sil", "br", "a pau"]) {
+    const p = plan(track(["-", "あ", rest, "-", "な"]));
+    assert.ok(!("kind" in p));
+    if ("kind" in p) continue;
+    assert.deepEqual(p.phones.filter((p) => p.ownerId === "n4").map((p) => p.phone), ["pau"]);
+    assert.deepEqual(p.diagnostics.map((d) => d.ownerId), ["n1", "n4"]);
+  }
+  const t = track(["あ", "unused", "-"]);
+  t.notes.splice(1, 1);
+  t.gaps.push({ id: "g1", startTick: 480, endTick: 960, kind: "pau" });
+  const p = plan(t);
+  assert.ok(!("kind" in p));
+  if ("kind" in p) return;
+  assert.deepEqual(p.phones.map((p) => p.phone), ["a", "pau", "pau"]);
+  assert.equal(p.diagnostics[0].ownerId, "n3");
+});
