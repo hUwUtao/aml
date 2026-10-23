@@ -3,7 +3,7 @@ import type { DynamicImportContext, PluginDef } from "@amsvs/api";
 import { importScore } from "./importer";
 
 const PLUGIN_ID = "import.ust";
-const PLUGIN_VERSION = "0.1.0";
+const PLUGIN_VERSION = "0.1.1";
 
 function readPayload(ctx: DynamicImportContext): { bytes: Uint8Array | string; filename: string; format?: string } {
   const file = ctx.file;

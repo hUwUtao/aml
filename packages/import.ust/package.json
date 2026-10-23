@@ -3,7 +3,7 @@
   "pluginId": "import.ust",
   "pluginName": "UTAU / OpenUtau score importer",
   "pluginRole": "hook",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Imports UTAU UST and OpenUtau USTX score files",
   "type": "module",

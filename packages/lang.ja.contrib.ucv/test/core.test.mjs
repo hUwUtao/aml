@@ -148,3 +148,41 @@ test("explicit gap survives plan/finalize as a gap row", () => {
 test("unsupported mora fails instead of guessing", () => {
   assert.throws(() => parseJapaneseLyric("☆"), /unsupported Japanese mora/);
 });
+
+
+test("common kanji words use longest readings alongside kana", () => {
+  for (const [word, reading] of [
+    ["君の夢", "きみのゆめ"], ["今日", "きょう"], ["明日", "あした"],
+    ["大好き", "だいすき"], ["一人", "ひとり"], ["二人", "ふたり"],
+    ["星空", "ほしぞら"], ["歌声", "うたごえ"], ["思い出", "おもいで"],
+    ["未来へ続く", "みらいへつづく"],
+  ]) assert.deepEqual(phones(word), phones(reading));
+});
+
+test("planning skips bad phones and retains usable phones and following notes", () => {
+  const t = track(["あ☆い", "ignored", "k invalid a", "な"]);
+  t.notes[1].phoneOverride = ["k", "invalid", "a"];
+  const p = plan(t);
+  assert.ok(!("kind" in p));
+  if ("kind" in p) return;
+  assert.deepEqual(p.phones.map((p) => p.phone), ["a", "i", "k", "a", "k", "a", "n", "a"]);
+  assert.deepEqual(p.diagnostics.map((d) => d.ownerId), ["n1", "n2", "n3"]);
+  assert.ok(p.diagnostics.every((d) => d.severity === "warning"));
+  assert.equal(finalize(p).kind, "neutrino_sinsy_v1");
+});
+
+test("unusable notes become pauses and reset extender context", () => {
+  const t = track(["あ", "☆", "+", "ignored", "な"]);
+  t.notes[3].phoneOverride = ["invalid"];
+  const p = plan(t);
+  assert.ok(!("kind" in p));
+  if ("kind" in p) return;
+  assert.deepEqual(p.phones.map((p) => p.phone), ["a", "pau", "pau", "pau", "n", "a"]);
+  assert.equal(finalize(p).kind, "neutrino_sinsy_v1");
+});
+
+test("recovery still rejects malformed track structure", () => {
+  const t = track(["あ"]);
+  t.notes[0].endTick = 0;
+  assert.equal(plan(t).kind, "malformed");
+});

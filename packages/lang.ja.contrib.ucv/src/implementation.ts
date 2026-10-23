@@ -127,29 +127,31 @@ export function plan(
     const note = item.note;
     const source = sourceSpan(note);
     let morae: Mora[];
-    try {
-      if (note.phoneOverride?.length) {
-        const invalid = note.phoneOverride.filter((phone) => !JA_PHONES.has(phone));
-        if (invalid.length) {
-          return {
-            kind: "malformed",
-            message: `unsupported phoneOverride on ${note.id}: ${invalid.join(", ")}`,
-          };
-        }
-        morae = [{ source: "phoneOverride", phones: [...note.phoneOverride] }];
-      } else {
-        const lyric = note.lyric?.trim() ?? "+";
-        morae = parseJapaneseLyric(lyric, previousVowel);
-      }
-    } catch (error) {
-      return {
-        kind: "malformed",
-        message: `${note.id}: ${error instanceof Error ? error.message : String(error)}`,
-      };
+    const onSkipped = (message: string) => diagnostics.push({
+      severity: "warning" as const,
+      code: "skipped_invalid_phone",
+      message: `${note.id}: ${message}`,
+      ownerId: note.id,
+    });
+    if (note.phoneOverride?.length) {
+      const phones = note.phoneOverride.filter((phone) => {
+        if (JA_PHONES.has(phone)) return true;
+        onSkipped(`unsupported phoneOverride: ${phone}`);
+        return false;
+      });
+      morae = phones.length ? [{ source: "phoneOverride", phones }] : [];
+    } else {
+      const lyric = note.lyric?.trim() ?? "+";
+      morae = parseJapaneseLyric(lyric, previousVowel, onSkipped);
     }
 
-    if (morae.length === 0) return { kind: "malformed", message: `${note.id}: empty phoneme plan` };
-    previousVowel = trailingVowel(morae, previousVowel);
+    if (morae.length === 0) {
+      // Keep the authored time span silent when no usable phones remain.
+      morae = [{ source: note.lyric ?? "", phones: ["pau"] }];
+      previousVowel = null;
+    } else {
+      previousVowel = trailingVowel(morae, previousVowel);
+    }
 
     const slotStart = tickTo100ns(track, source.startTick);
     const slotEnd = tickTo100ns(track, source.endTick);

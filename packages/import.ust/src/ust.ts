@@ -26,6 +26,7 @@ export function parseUst(text: string, filename: string): AuthoredTrack {
     if (header) { current = { name: header[1]!, values: {} }; blocks.push(current); continue; }
     if (!line || line.startsWith(";")) continue;
     if (!current) continue;
+    if (current.name.toUpperCase() === "VERSION" && /^UST Version\d+(?:\.\d+)*$/i.test(line)) continue;
     const split = line.indexOf("=");
     if (split < 1) throw new Error(`Invalid UST line: ${rawLine}`);
     current.values[line.slice(0, split).trim()] = line.slice(split + 1).trim();

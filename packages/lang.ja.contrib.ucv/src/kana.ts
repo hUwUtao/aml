@@ -83,6 +83,41 @@ const ROMAJI: Record<string, string[]> = {
   rya:["ry","a"],ryu:["ry","u"],rye:["ry","e"],ryo:["ry","o"],xtsu:["cl"],ltsu:["cl"],
 };
 
+// Common lyric vocabulary. Prefer whole words over ambiguous single-kanji readings.
+const KANJI_READINGS: Record<string, string> = {
+  今日: "きょう", 明日: "あした", 昨日: "きのう", 今夜: "こんや",
+  未来: "みらい", 過去: "かこ", 時間: "じかん", 世界: "せかい",
+  宇宙: "うちゅう", 地球: "ちきゅう", 日本: "にほん", 言葉: "ことば",
+  気持ち: "きもち", 笑顔: "えがお", 涙: "なみだ", 笑う: "わらう",
+  大人: "おとな", 子供: "こども", 一人: "ひとり", 二人: "ふたり",
+  一緒: "いっしょ", 自分: "じぶん", 本当: "ほんとう", 大切: "たいせつ",
+  大好き: "だいすき", 好き: "すき", 素敵: "すてき", 幸せ: "しあわせ",
+  永遠: "えいえん", 希望: "きぼう", 約束: "やくそく", 記憶: "きおく",
+  思い出: "おもいで", 季節: "きせつ", 桜: "さくら", 雪: "ゆき",
+  太陽: "たいよう", 星空: "ほしぞら", 青空: "あおぞら", 夜空: "よぞら",
+  朝日: "あさひ", 夕日: "ゆうひ", 夕暮れ: "ゆうぐれ", 景色: "けしき",
+  電車: "でんしゃ", 学校: "がっこう", 友達: "ともだち", 家族: "かぞく",
+  音楽: "おんがく", 歌声: "うたごえ", 心: "こころ", 愛: "あい",
+  恋: "こい", 夢: "ゆめ", 君: "きみ", 僕: "ぼく", 私: "わたし",
+  空: "そら", 海: "うみ", 風: "かぜ", 雨: "あめ", 星: "ほし",
+  月: "つき", 花: "はな", 光: "ひかり", 闇: "やみ", 影: "かげ",
+  声: "こえ", 歌: "うた", 音: "おと", 道: "みち", 街: "まち",
+  人: "ひと", 手: "て", 目: "め", 耳: "みみ", 口: "くち",
+  春: "はる", 夏: "なつ", 秋: "あき", 冬: "ふゆ", 朝: "あさ",
+  昼: "ひる", 夜: "よる", 今: "いま", 時: "とき", 色: "いろ",
+  白い: "しろい", 黒い: "くろい", 赤い: "あかい", 青い: "あおい",
+  遠い: "とおい", 近い: "ちかい", 強い: "つよい", 弱い: "よわい",
+  優しい: "やさしい", 悲しい: "かなしい", 嬉しい: "うれしい",
+  楽しい: "たのしい", 美しい: "うつくしい", 新しい: "あたらしい",
+  古い: "ふるい", 小さな: "ちいさな", 大きな: "おおきな",
+  生き: "いき", 生まれ: "うまれ", 歩く: "あるく", 走る: "はしる",
+  会い: "あい", 会う: "あう", 逢い: "あい", 逢う: "あう",
+  見: "み", 聞: "き", 言: "い", 思: "おも", 想: "おも",
+  忘: "わす", 信: "しん", 待: "ま", 泣: "な", 咲: "さ",
+  届: "とど", 続: "つづ", 変: "か", 帰: "かえ", 知: "し",
+};
+const KANJI_WORDS = Object.keys(KANJI_READINGS).sort((a, b) => b.length - a.length);
+
 function katakanaToHiragana(input: string): string {
   return [...input].map((ch) => {
     const code = ch.codePointAt(0)!;
@@ -129,10 +164,18 @@ function parseRomanizedText(text: string): string[] | null {
   return phones;
 }
 
-export function parseJapaneseLyric(raw: string, previousVowel: string | null = null): Mora[] {
+export function parseJapaneseLyric(
+  raw: string,
+  previousVowel: string | null = null,
+  onSkipped?: (message: string) => void,
+): Mora[] {
   let text = normalizeSurface(raw);
   if (!text || text === "+") {
-    if (!previousVowel) throw new Error("lyric extender has no previous vowel");
+    if (!previousVowel) {
+      if (!onSkipped) throw new Error("lyric extender has no previous vowel");
+      onSkipped("lyric extender has no previous vowel");
+      return [];
+    }
     return [{ source: text || "+", phones: [previousVowel] }];
   }
   if (text === "-") return [{ source: text, phones: ["pau"] }];
@@ -141,20 +184,52 @@ export function parseJapaneseLyric(raw: string, previousVowel: string | null = n
   if (isCanonicalPhoneSequence(text)) return [{ source: text, phones: text.split(/\s+/) }];
   const romanized = parseRomanizedText(text);
   if (romanized) return [{ source: text, phones: romanized }];
+  if (onSkipped && /^[\x20-\x7e]+$/.test(text)) {
+    const morae: Mora[] = [];
+    for (const token of text.split(/\s+/)) {
+      const phones = JA_PHONES.has(token) ? [token] : parseRomanizedToken(token);
+      if (phones) morae.push({ source: token, phones });
+      else onSkipped(`unsupported Japanese phone: ${JSON.stringify(token)}`);
+    }
+    return morae;
+  }
   text = text.replace(/[、。,.!?！？・]/g, "");
   if (!text) return [{ source: raw, phones: ["pau"] }];
+  text = text.replace(/[\p{Script=Han}\p{Script=Hiragana}]+/gu, (run) => {
+    let reading = "";
+    for (let i = 0; i < run.length;) {
+      const word = KANJI_WORDS.find((candidate) => run.startsWith(candidate, i));
+      reading += word ? KANJI_READINGS[word] : run[i];
+      i += word?.length ?? 1;
+    }
+    return reading;
+  });
   const morae: Mora[] = [];
   let inheritedVowel = previousVowel;
   for (let i = 0; i < text.length;) {
     const one = text[i]!;
+    if (onSkipped && /\s/u.test(one)) { i++; continue; }
     if (one === "ー") {
-      if (!inheritedVowel) throw new Error("long-vowel mark has no preceding vowel");
+      if (!inheritedVowel) {
+        if (!onSkipped) throw new Error("long-vowel mark has no preceding vowel");
+        onSkipped("long-vowel mark has no preceding vowel");
+        i++;
+        continue;
+      }
       morae.push({ source: one, phones: [inheritedVowel] }); i++; continue;
     }
     const two = text.slice(i, i + 2);
     const phones = DIGRAPH[two] ?? BASIC[one];
     const source = DIGRAPH[two] ? two : one;
-    if (!phones) throw new Error(`unsupported Japanese mora: ${JSON.stringify(source)}`);
+    if (!phones) {
+      const unsupported = String.fromCodePoint(text.codePointAt(i)!);
+      const message = `unsupported Japanese mora: ${JSON.stringify(unsupported)}`;
+      if (!onSkipped) throw new Error(message);
+      onSkipped(message);
+      inheritedVowel = null;
+      i += unsupported.length;
+      continue;
+    }
     morae.push({ source, phones: [...phones] }); inheritedVowel = lastVowel(phones) ?? inheritedVowel;
     i += DIGRAPH[two] ? 2 : 1;
   }
