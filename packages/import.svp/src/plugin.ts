@@ -15,7 +15,7 @@ const importer = {
   name: "Synthesizer V Studio score",
   role: "importer",
   extensions: ["svp"],
-  import(ctx: DynamicImportContext) {
+  onImport(ctx: DynamicImportContext) {
     const payload = readPayload(ctx);
     const text = typeof payload.bytes === "string" ? payload.bytes : Encoding.convert(payload.bytes, { to: "UNICODE", from: "UTF8", type: "string", fallback: "error" });
     return { tracks: parseSvp(text, payload.filename), diagnostics: [] };

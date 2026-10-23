@@ -15,7 +15,7 @@ const importer = {
   name: "CeVIO score",
   role: "importer",
   extensions: ["ccs", "ccst"],
-  import(ctx: DynamicImportContext) {
+  onImport(ctx: DynamicImportContext) {
     const payload = readPayload(ctx);
     const extension = (payload.format ?? payload.filename.split(".").pop() ?? "").toLowerCase().replace(/^\./, "");
     const text = typeof payload.bytes === "string" ? payload.bytes : Encoding.convert(payload.bytes, { to: "UNICODE", from: "UTF8", type: "string", fallback: "error" });

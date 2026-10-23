@@ -17,7 +17,7 @@ const importer = {
   name: "UTAU / OpenUtau score",
   role: "importer",
   extensions: ["ust", "ustx"],
-  import(ctx: DynamicImportContext) {
+  onImport(ctx: DynamicImportContext) {
     const payload = readPayload(ctx);
     return importScore(payload.format, payload.bytes, payload.filename);
   },
