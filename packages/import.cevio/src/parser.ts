@@ -1,39 +1,35 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import type { AuthoredTrack, TempoPoint } from "@amsvs/api";
-import { CEVIO_PPQ, dedupeTempo, integer, jsonSafe, list, makeTrack, number, object, stableId, string } from "../../import.common/shared";
-import type { AnyRecord, SourceNote } from "../../import.common/shared";
+import { CEVIO_PPQ, collect, dedupeTempo, integer, jsonSafe, makeTrack, number, object, recover, stableId, string } from "../../import.common/shared";
+import type { AnyRecord, ImportDiagnostic, SourceNote } from "../../import.common/shared";
 
-function xmlList(value: unknown): AnyRecord[] {
-  return (Array.isArray(value) ? value : value === undefined || value === null ? [] : [value])
-    .filter((item): item is AnyRecord => !!item && typeof item === "object" && !Array.isArray(item));
+function xmlList(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : value === undefined || value === null ? [] : [value];
 }
 
-function xmlNumber(value: unknown, where: string, fallback?: number): number {
-  if (value === undefined && fallback !== undefined) return fallback;
-  return number(value, where);
-}
-
-export function parseCevio(text: string, filename: string, extension: string): AuthoredTrack[] {
+export function parseCevio(text: string, filename: string, extension: string, diagnostics: ImportDiagnostic[] = []): AuthoredTrack[] {
   const validation = XMLValidator.validate(text);
   if (validation !== true) throw new Error(`Invalid CeVIO XML: ${validation.err.msg}`);
-  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", parseAttributeValue: true,
+  const parser = new XMLParser({ ignoreAttributes: false, attributeNamePrefix: "@_", parseAttributeValue: false,
     trimValues: true, isArray: (name) => ["Unit", "Sound", "Time", "Note", "Key", "Dynamics", "Data", "NoData"].includes(name) });
   const document = parser.parse(text) as AnyRecord;
   const rootName = Object.keys(document).find((name) => name !== "?xml");
   const root = rootName ? object(document[rootName], "CeVIO XML root") : {};
+  if (extension === "import.cevio.score") extension = rootName === "Definition" ? "ccst" : "ccs";
+  if (extension !== "ccs" && extension !== "ccst") throw new Error(`Unsupported CeVIO format: ${extension}`);
   if ((extension === "ccs" && rootName !== "Scenario") || (extension === "ccst" && rootName !== "Definition")) {
     throw new Error(`Expected a CeVIO ${extension.toUpperCase()} ${extension === "ccs" ? "Scenario" : "Definition"} XML document`);
   }
   const unitsRoot = findXmlObject(root, "Units") ?? root;
-  const units = xmlList(unitsRoot.Unit).filter((unit) => String(unit["@_Category"] ?? "") === "SingerSong");
+  const units = xmlList(unitsRoot.Unit).filter((unit): unit is AnyRecord => !!unit && typeof unit === "object" && !Array.isArray(unit) && (unit as AnyRecord)["@_Category"] === "SingerSong");
   const basename = stableId(filename.replace(/\.[^.]+$/, ""));
-  const tracks: AuthoredTrack[] = [];
-  for (let unitIndex = 0; unitIndex < units.length; unitIndex++) {
-    const unit = units[unitIndex]!;
+  const tracks = collect(units, diagnostics, "CeVIO Unit", (value, unitIndex) => {
+    const unit = object(value, `Unit[${unitIndex}]`);
     const song = unit.Song && typeof unit.Song === "object" ? object(unit.Song, `Unit[${unitIndex}].Song`) : null;
-    if (!song) continue;
-    const tempoNode = song.Tempo && typeof song.Tempo === "object" ? object(song.Tempo, "Song.Tempo") : {};
-    const tempoItems = xmlList(tempoNode.Sound).map((item, i) => {
+    if (!song) throw new Error("SingerSong unit has no Song");
+    const tempoNode = recover(diagnostics, "invalid_tempo", "Ignored invalid Song.Tempo", () => song.Tempo === undefined ? {} : object(song.Tempo, "Song.Tempo"), {});
+    const tempoItems = collect(xmlList(tempoNode.Sound), diagnostics, `Unit[${unitIndex}].Tempo.Sound`, (value, i) => {
+      const item = object(value, `Tempo.Sound[${i}]`);
       const tick = integer(item["@_Clock"], `Tempo.Sound[${i}].Clock`);
       const bpm = number(item["@_Tempo"], `Tempo.Sound[${i}].Tempo`);
       if (tick < 0 || bpm <= 0) throw new Error(`CeVIO tempo ${i} has invalid clock or tempo`);
@@ -41,8 +37,9 @@ export function parseCevio(text: string, filename: string, extension: string): A
     });
     const tempos = dedupeTempo(tempoItems);
     if (!tempos.length || tempos[0]!.tick > 0) tempos.unshift({ tick: 0, bpm: 120 });
-    const beatNode = song.Beat && typeof song.Beat === "object" ? object(song.Beat, "Song.Beat") : {};
-    const meterItems = xmlList(beatNode.Time).map((item, i) => {
+    const beatNode = recover(diagnostics, "invalid_meter", "Ignored invalid Song.Beat", () => song.Beat === undefined ? {} : object(song.Beat, "Song.Beat"), {});
+    const meterItems = collect(xmlList(beatNode.Time), diagnostics, `Unit[${unitIndex}].Beat.Time`, (value, i) => {
+      const item = object(value, `Beat.Time[${i}]`);
       const tick = integer(item["@_Clock"], `Beat.Time[${i}].Clock`);
       const beats = integer(item["@_Beats"], `Beat.Time[${i}].Beats`);
       const beatType = integer(item["@_BeatType"], `Beat.Time[${i}].BeatType`);
@@ -53,7 +50,8 @@ export function parseCevio(text: string, filename: string, extension: string): A
     const score = song.Score && typeof song.Score === "object" ? object(song.Score, "Song.Score") : {};
     const noteItems = xmlList(score.Note);
     const offset = timecodeToTicks(unit["@_StartTime"], tempos);
-    const sourceNotes: SourceNote[] = noteItems.map((item, i) => {
+    const sourceNotes: SourceNote[] = collect(noteItems, diagnostics, `Unit[${unitIndex}].Note`, (value, i) => {
+      const item = object(value, `Note[${i}]`);
       const localStart = integer(item["@_Clock"], `Note[${i}].Clock`);
       const duration = integer(item["@_Duration"], `Note[${i}].Duration`);
       const pitch = integer(item["@_PitchOctave"], `Note[${i}].PitchOctave`) * 12 + 12 + integer(item["@_PitchStep"], `Note[${i}].PitchStep`);
@@ -63,15 +61,14 @@ export function parseCevio(text: string, filename: string, extension: string): A
       return { start: offset + localStart, end: offset + localStart + duration, pitch, lyric, source: attrs,
         extension: { cevio: { ...attrs, localClock: localStart, duration } } };
     });
-    const extentEnd = Math.max(offset, ...sourceNotes.map((note) => note.end));
     const parameter = song.Parameter ?? null;
-    const partName = string(unit["@_Name"], `Unit[${unitIndex}].Name`, `Track ${unitIndex + 1}`);
-    tracks.push(makeTrack({ id: `${basename}_${unitIndex + 1}`, name: partName, notes: sourceNotes, tempos,
-      meters: meterItems, ppq: CEVIO_PPQ, extentEnd,
+    const partName = recover(diagnostics, "invalid_metadata", "Using default CeVIO track name", () => string(unit["@_Name"], `Unit[${unitIndex}].Name`, `Track ${unitIndex + 1}`), `Track ${unitIndex + 1}`);
+    return makeTrack({ id: `${basename}_${unitIndex + 1}`, name: partName, notes: sourceNotes, tempos,
+      meters: meterItems, ppq: CEVIO_PPQ, extentEnd: offset,
       source: { format: extension, root: rootName, unit: jsonSafe(unit), parameter: jsonSafe(parameter), scoreMeta: {
         keys: jsonSafe(score.Key ?? []), dynamics: jsonSafe(score.Dynamics ?? []), startTime: unit["@_StartTime"] ?? null,
-      } } }));
-  }
+      } } }, diagnostics);
+  });
   if (!tracks.length) throw new Error(`CeVIO ${extension.toUpperCase()} contains no SingerSong tracks`);
   return tracks;
 }

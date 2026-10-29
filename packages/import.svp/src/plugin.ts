@@ -2,6 +2,7 @@ import { plugin } from "@amsvs/api";
 import type { DynamicImportContext, PluginDef } from "@amsvs/api";
 import { parseSvp } from "./parser";
 import * as Encoding from "encoding-japanese";
+import type { ImportDiagnostic } from "../../import.common/shared";
 
 function readPayload(ctx: DynamicImportContext): { bytes: Uint8Array | string; filename: string } {
   const file = ctx.file;
@@ -18,7 +19,8 @@ const importer = {
   onImport(ctx: DynamicImportContext) {
     const payload = readPayload(ctx);
     const text = typeof payload.bytes === "string" ? payload.bytes : Encoding.convert(payload.bytes, { to: "UNICODE", from: "UTF8", type: "string", fallback: "error" });
-    return { tracks: parseSvp(text, payload.filename), diagnostics: [] };
+    const diagnostics: ImportDiagnostic[] = [];
+    return { tracks: parseSvp(text, payload.filename, diagnostics), diagnostics };
   },
 } as unknown as PluginDef;
 

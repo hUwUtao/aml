@@ -1,10 +1,22 @@
-import type { AuthoredNote, AuthoredTrack, JsonObject, MeterPoint, TempoPoint } from "@amsvs/api";
+import type { AuthoredNote, AuthoredTrack, JsonObject, MeterPoint, PluginDiagnostic, TempoPoint } from "@amsvs/api";
 
 export type AnyRecord = Record<string, unknown>;
 export type SourceNote = { start: number; end: number; pitch: number; lyric: string; source: AnyRecord; extension?: AnyRecord };
+export type ImportDiagnostic = PluginDiagnostic;
 export const PPQ = 480;
 export const CEVIO_PPQ = 960;
-const SVP_BLICKS_PER_QUARTER = 705_600_000;
+
+export function recover<T>(diagnostics: ImportDiagnostic[], code: string, message: string, read: () => T, fallback: T): T {
+  try { return read(); }
+  catch (error) {
+    diagnostics.push({ severity: "warning", code, message: `${message}: ${error instanceof Error ? error.message : String(error)}` });
+    return fallback;
+  }
+}
+
+export function collect<T>(values: unknown[], diagnostics: ImportDiagnostic[], where: string, read: (value: unknown, index: number) => T): T[] {
+  return values.flatMap((value, index) => recover(diagnostics, "skipped_record", `Skipped ${where}[${index}]`, () => [read(value, index)], []));
+}
 
 export function object(value: unknown, where: string): AnyRecord {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${where} must be a mapping`);
@@ -13,6 +25,7 @@ export function object(value: unknown, where: string): AnyRecord {
 export function list(value: unknown): unknown[] { return Array.isArray(value) ? value : []; }
 export function number(value: unknown, where: string, fallback?: number): number {
   if (value === undefined && fallback !== undefined) return fallback;
+  if ((typeof value !== "number" && typeof value !== "string") || (typeof value === "string" && !value.trim())) throw new Error(`${where} must be a finite number`);
   const result = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(result)) throw new Error(`${where} must be a finite number`);
   return result;
@@ -49,10 +62,10 @@ export function dedupeTempo(points: TempoPoint[]): TempoPoint[] {
   return [...byTick.values()].sort((a, b) => a.tick - b.tick);
 }
 
-export function parseUstxMeters(input: unknown, ppq: number): MeterPoint[] {
-  const rows = list(input).map((value, i) => {
+export function parseUstxMeters(input: unknown, ppq: number, diagnostics: ImportDiagnostic[] = []): MeterPoint[] {
+  const rows = collect(list(input), diagnostics, "time_signatures", (value, i) => {
     const item = object(value, `time_signatures[${i}]`);
-    const row = { bar: number(item.bar_position, `time_signatures[${i}].bar_position`, 0), beats: integer(item.beat_per_bar, `time_signatures[${i}].beat_per_bar`), beatType: integer(item.beat_unit, `time_signatures[${i}].beat_unit`) };
+    const row = { bar: integer(item.bar_position, `time_signatures[${i}].bar_position`, 0), beats: integer(item.beat_per_bar, `time_signatures[${i}].beat_per_bar`), beatType: integer(item.beat_unit, `time_signatures[${i}].beat_unit`) };
     if (row.bar < 0 || row.beats <= 0 || row.beatType <= 0) throw new Error(`time_signatures[${i}] has invalid values`);
     return row;
   }).sort((a, b) => a.bar - b.bar);
@@ -61,16 +74,21 @@ export function parseUstxMeters(input: unknown, ppq: number): MeterPoint[] {
   const result: MeterPoint[] = [];
   let bar = 0; let tick = 0; let prior = rows[0]!;
   for (const row of rows) {
-    tick += Math.round((row.bar - bar) * prior.beats * ppq * 4 / prior.beatType);
+    const nextTick = tick + Math.round((row.bar - bar) * prior.beats * ppq * 4 / prior.beatType);
+    if (!Number.isSafeInteger(nextTick)) {
+      diagnostics.push({ severity: "warning", code: "skipped_record", message: `Skipped time signature at bar ${row.bar}: tick exceeds safe integer range` });
+      continue;
+    }
+    tick = nextTick;
     result.push({ tick, beats: row.beats, beatType: row.beatType });
     bar = row.bar; prior = row;
   }
   return result;
 }
 
-export function convertUstxNoteExtensions(source: AnyRecord, startTick: number, endTick: number, tempos: TempoPoint[], ppq: number): AnyRecord {
-  const pitch = entries(source.pitch);
-  const data = list(pitch.data).map((point, i) => {
+export function convertUstxNoteExtensions(source: AnyRecord, startTick: number, endTick: number, tempos: TempoPoint[], ppq: number, diagnostics: ImportDiagnostic[] = []): AnyRecord {
+  const pitch = recover(diagnostics, "invalid_expression", "Ignored invalid USTX pitch", () => entries(source.pitch), {});
+  const data = collect(list(pitch.data), diagnostics, "pitch.data", (point, i) => {
     const p = object(point, `pitch.data[${i}]`);
     return { xMs: number(p.x, `pitch.data[${i}].x`), y: number(p.y, `pitch.data[${i}].y`), shape: p.shape ?? null };
   });
@@ -80,7 +98,7 @@ export function convertUstxNoteExtensions(source: AnyRecord, startTick: number, 
     position: durationMs ? Math.max(0, Math.min(1, point.xMs / durationMs)) : 0,
     cents: point.y * 10,
   }));
-  const vibrato = convertVibrato(source.vibrato, durationMs);
+  const vibrato = recover(diagnostics, "invalid_expression", "Ignored invalid USTX vibrato", () => convertVibrato(source.vibrato, durationMs), undefined);
   return { pitchData: data, pitchSnapFirst: pitch.snap_first ?? null,
     pitchExpression: points.length || vibrato ? { points, ...(vibrato ? { vibrato } : {}) } : null,
     vibratoSource: source.vibrato ?? null, phonemeExpressions: list(source.phoneme_expressions), phonemeOverrides: list(source.phoneme_overrides),
@@ -96,17 +114,24 @@ export function tickToMs(tick: number, tempos: TempoPoint[], ppq: number): numbe
   return ms + (tick - cursor) * 60000 / (ppq * bpm);
 }
 
-export function makeTrack(input: { id: string; name: string; notes: SourceNote[]; tempos: TempoPoint[]; meters: MeterPoint[]; ppq: number; extentEnd?: number; source: AnyRecord }): AuthoredTrack {
-  const notes = input.notes.slice().sort((a, b) => a.start - b.start || a.end - b.end);
-  const extentEnd = Math.max(1, input.extentEnd ?? 0, ...notes.map((note) => note.end));
+export function makeTrack(input: { id: string; name: string; notes: SourceNote[]; tempos: TempoPoint[]; meters: MeterPoint[]; ppq: number; extentEnd?: number; source: AnyRecord }, diagnostics: ImportDiagnostic[] = []): AuthoredTrack {
+  const notes = input.notes.filter((note, i) => {
+    const valid = Number.isSafeInteger(note.start) && Number.isSafeInteger(note.end) && note.start >= 0 && note.end > note.start && Number.isSafeInteger(note.pitch) && note.pitch >= 0 && note.pitch <= 127;
+    if (!valid) diagnostics.push({ severity: "warning", code: "skipped_note", message: `Skipped note ${i} in ${input.name}: invalid timing or MIDI pitch` });
+    return valid;
+  }).sort((a, b) => a.start - b.start || a.end - b.end);
+  const extentEnd = notes.reduce((end, note) => Math.max(end, note.end), Math.max(1, Number.isSafeInteger(input.extentEnd) ? input.extentEnd! : 0));
   let cursor = 0;
   const authored: AuthoredNote[] = [];
   const gaps: { id: string; startTick: number; endTick: number; kind: "sil" }[] = [];
   for (let i = 0; i < notes.length; i++) {
     const note = notes[i]!;
-    if (note.start < cursor) throw new Error(`Overlapping notes cannot be represented in AML track ${input.name}`);
+    if (note.start < cursor) {
+      diagnostics.push({ severity: "warning", code: "overlapping_note", message: `Skipped overlapping note ${i} in ${input.name} at tick ${note.start}` });
+      continue;
+    }
     if (note.start > cursor) gaps.push({ id: `${input.id}:gap:${gaps.length}`, startTick: cursor, endTick: note.start, kind: "sil" });
-    const extra = note.extension ?? convertUstNoteExtensions(note, note.start, note.end, input.tempos, input.ppq);
+    const extra = note.extension ?? recover(diagnostics, "invalid_expression", `Ignored invalid expression on note ${i} in ${input.name}`, () => convertUstNoteExtensions(note, note.start, note.end, input.tempos, input.ppq), {});
     authored.push({ id: `${input.id}:note:${i}`, startTick: note.start, endTick: note.end, pitch: note.pitch, lyric: note.lyric,
       ...(extra.pitchExpression && typeof extra.pitchExpression === "object" ? { pitchExpression: extra.pitchExpression as AuthoredNote["pitchExpression"] } : {}),
       extensions: jsonSafe({ source: note.source, ...extra }) as JsonObject });
