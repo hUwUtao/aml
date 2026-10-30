@@ -1,7 +1,8 @@
 import type { AuthoredNote, AuthoredTrack, JsonObject, MeterPoint, PluginDiagnostic, TempoPoint } from "@amsvs/api";
 
 export type AnyRecord = Record<string, unknown>;
-export type SourceNote = { start: number; end: number; pitch: number; lyric: string; source: AnyRecord; extension?: AnyRecord };
+export type SourceNote = { start: number; end: number; pitch: number; lyric: string; source: AnyRecord; extension?: AnyRecord;
+  authored?: Pick<AuthoredNote, "flags" | "slurs" | "phoneOverride"> };
 export type ImportDiagnostic = PluginDiagnostic;
 export const PPQ = 480;
 export const CEVIO_PPQ = 960;
@@ -39,6 +40,15 @@ export function string(value: unknown, where: string, fallback = ""): string {
   if (value === undefined || value === null) return fallback;
   if (typeof value !== "string") throw new Error(`${where} must be a string`);
   return value;
+}
+export function boolean(value: unknown, where: string): boolean {
+  if (value === true || value === "true" || value === "1") return true;
+  if (value === false || value === "false" || value === "0") return false;
+  throw new Error(`${where} must be a boolean`);
+}
+export function phoneOverride(value: unknown, where: string, delimiter: RegExp): string[] | undefined {
+  const phones = string(value, where).split(delimiter).map((phone) => phone.trim()).filter(Boolean);
+  return phones.length ? phones : undefined;
 }
 export function jsonSafe(value: unknown): unknown {
   if (value === undefined || value === null) return null;
@@ -132,7 +142,7 @@ export function makeTrack(input: { id: string; name: string; notes: SourceNote[]
     }
     if (note.start > cursor) gaps.push({ id: `${input.id}:gap:${gaps.length}`, startTick: cursor, endTick: note.start, kind: "sil" });
     const extra = note.extension ?? recover(diagnostics, "invalid_expression", `Ignored invalid expression on note ${i} in ${input.name}`, () => convertUstNoteExtensions(note, note.start, note.end, input.tempos, input.ppq), {});
-    authored.push({ id: `${input.id}:note:${i}`, startTick: note.start, endTick: note.end, pitch: note.pitch, lyric: note.lyric,
+    authored.push({ id: `${input.id}:note:${i}`, startTick: note.start, endTick: note.end, pitch: note.pitch, lyric: note.lyric, ...note.authored,
       ...(extra.pitchExpression && typeof extra.pitchExpression === "object" ? { pitchExpression: extra.pitchExpression as AuthoredNote["pitchExpression"] } : {}),
       extensions: jsonSafe({ source: note.source, ...extra }) as JsonObject });
     cursor = note.end;

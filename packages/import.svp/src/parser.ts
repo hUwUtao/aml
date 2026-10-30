@@ -1,5 +1,5 @@
 import type { AuthoredTrack, MeterPoint } from "@amsvs/api";
-import { PPQ, collect, dedupeTempo, integer, jsonSafe, list, makeTrack, number, object, recover, string, stableId } from "../../import.common/shared";
+import { PPQ, collect, dedupeTempo, integer, jsonSafe, list, makeTrack, number, object, phoneOverride, recover, string, stableId } from "../../import.common/shared";
 import type { AnyRecord, ImportDiagnostic, SourceNote } from "../../import.common/shared";
 
 const SVP_BLICKS_PER_QUARTER = 705_600_000;
@@ -45,7 +45,9 @@ export function parseSvp(text: string, filename: string, diagnostics: ImportDiag
       for (const { x, y } of curvePoints) {
         if (x >= startBlick && x <= endBlick) points.push({ position: (x - startBlick) / (endBlick - startBlick), cents: y });
       }
-      return { start, end: start + duration, pitch, lyric: string(note.lyrics, `SVP note[${noteIndex}].lyrics`), source: note,
+      const phones = recover(diagnostics, "invalid_expression", `Ignored invalid SVP phonemes on note ${noteIndex}`, () => phoneOverride(note.phonemes, "SVP phonemes", /\s+/), undefined);
+      return { start, end: svpBlickToTick(endBlick), pitch, lyric: string(note.lyrics, `SVP note[${noteIndex}].lyrics`), source: note,
+        authored: phones ? { phoneOverride: phones } : undefined,
         extension: { pitchExpression: points.length ? { points } : null, svpPitchDelta: jsonSafe(curve) } } as SourceNote;
     });
     const trackName = recover(diagnostics, "invalid_metadata", "Using default SVP track name", () => string(track.name, `SVP tracks[${trackIndex}].name`, `Track ${trackIndex + 1}`), `Track ${trackIndex + 1}`);

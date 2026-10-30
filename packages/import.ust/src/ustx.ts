@@ -41,6 +41,8 @@ export function parseUstx(text: string, filename: string, diagnostics: ImportDia
       if (start < 0 || duration <= 0 || pitch < 0 || pitch > 127) throw new Error(`USTX note ${noteIndex} has invalid timing or MIDI tone`);
       const note: SourceNote = { start, end: start + duration, pitch, lyric: string(n.lyric, `note ${noteIndex}.lyric`), source: n };
       note.extension = convertUstxNoteExtensions(n, note.start, note.end, tempos, resolution, diagnostics);
+      if (list(n.phoneme_overrides).length) diagnostics.push({ severity: "warning", code: "preserved_phoneme_overrides",
+        message: `USTX note ${noteIndex} phoneme overrides are preserved in extensions; sparse phonemizer-specific edits cannot be applied as a complete phone override` });
       return note;
     });
     const trackName = recover(diagnostics, "invalid_metadata", "Using default USTX track name", () => string(sourceTrack.track_name, `tracks[${trackNo}].track_name`, `Track ${trackNo + 1}`), `Track ${trackNo + 1}`);
@@ -54,8 +56,8 @@ export function parseUstx(text: string, filename: string, diagnostics: ImportDia
       id: `${basename}_${trackNo + 1}_${partIndex + 1}`, name: `${trackName} / ${partName}`,
       notes: noteInputs, tempos, meters, ppq: resolution, extentEnd,
       source: { format: "ustx", version: root.ustx_version ?? null, projectName: root.name ?? null,
-        sourceTrack: { track_name: sourceTrack.track_name, singer: sourceTrack.singer, phonemizer: sourceTrack.phonemizer },
-        part: { name: part.name, position: offset, duration: part.duration }, curves: list(part.curves),
+        sourceTrack,
+        part: Object.fromEntries(Object.entries(part).filter(([key]) => key !== "notes")), curves: list(part.curves), expressions: root.expressions ?? null,
         waveParts: list(root.wave_parts), key: root.key ?? null },
     }, diagnostics);
   });

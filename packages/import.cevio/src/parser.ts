@@ -1,6 +1,6 @@
 import { XMLParser, XMLValidator } from "fast-xml-parser";
 import type { AuthoredTrack, TempoPoint } from "@amsvs/api";
-import { CEVIO_PPQ, collect, dedupeTempo, integer, jsonSafe, makeTrack, number, object, recover, stableId, string } from "../../import.common/shared";
+import { CEVIO_PPQ, boolean, collect, dedupeTempo, integer, jsonSafe, makeTrack, number, object, phoneOverride, recover, stableId, string } from "../../import.common/shared";
 import type { AnyRecord, ImportDiagnostic, SourceNote } from "../../import.common/shared";
 
 function xmlList(value: unknown): unknown[] {
@@ -58,7 +58,15 @@ export function parseCevio(text: string, filename: string, extension: string, di
       if (localStart < 0 || duration <= 0 || pitch < 0 || pitch > 127) throw new Error(`CeVIO note ${i} has invalid timing or pitch`);
       const attrs = Object.fromEntries(Object.entries(item).filter(([key]) => key.startsWith("@_")));
       const lyric = string(item["@_Lyric"], `Note[${i}].Lyric`);
-      return { start: offset + localStart, end: offset + localStart + duration, pitch, lyric, source: attrs,
+      const readFlag = (name: string) => item[`@_${name}`] === undefined ? undefined : recover(diagnostics, "invalid_expression", `Ignored invalid CeVIO ${name} on note ${i}`, () => boolean(item[`@_${name}`], name), undefined);
+      const breath = readFlag("Breath");
+      const accent = readFlag("Accent");
+      const staccato = readFlag("Staccato");
+      const slurs = [...(readFlag("SlurStart") ? ["start"] : []), ...(readFlag("SlurStop") ? ["stop"] : [])];
+      const phones = recover(diagnostics, "invalid_expression", `Ignored invalid CeVIO Phonetic on note ${i}`, () => phoneOverride(item["@_Phonetic"], "Phonetic", /,/), undefined);
+      return { start: offset + localStart, end: offset + localStart + duration, pitch, lyric, source: item,
+        authored: { flags: { ...(breath !== undefined ? { breath } : {}), ...(accent !== undefined ? { accent } : {}), ...(staccato !== undefined ? { staccato } : {}) },
+          ...(slurs.length ? { slurs } : {}), ...(phones ? { phoneOverride: phones } : {}) },
         extension: { cevio: { ...attrs, localClock: localStart, duration } } };
     });
     const parameter = song.Parameter ?? null;

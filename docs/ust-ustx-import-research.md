@@ -73,3 +73,10 @@ lists `.ustx` as its project save format and `.ust` as an importable UTAU projec
 The UST/USTX notes above describe OpenUtau's documented format and current reader behavior; UST
 files in the wild vary in encoding, version, and producer-specific flags. AML should reject malformed
 required structure clearly and treat unknown optional keys as forward-compatible metadata.
+
+Current payload preservation: UST note fields (including pre-utterance, overlap, envelope, and flags)
+and USTX note fields (including indexed phoneme overrides and expressions) remain in note extensions.
+USTX track/part metadata and project expression descriptors are also retained. Indexed overrides are
+sparse edits to a source phonemizer's output, not a complete pronunciation: they stay payloaded with a
+diagnostic rather than replacing automatic pronunciation with an incomplete list. See OpenUtau's
+[override model](https://github.com/openutau/OpenUtau/blob/master/OpenUtau.Core/Ustx/UPhoneme.cs).
