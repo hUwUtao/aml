@@ -62,6 +62,36 @@ test("OpenUtau VCV prefix is syntax-normalized", () => {
   assert.deepEqual(phones("* た"), ["t", "a"]);
 });
 
+test("UTAU rest, breath, and release tokens resolve before romaji", () => {
+  for (const alias of ["R", "a R", "- R", "a -", "N -", "* -"]) {
+    assert.deepEqual(phones(alias), ["pau"]);
+  }
+  for (const alias of ["息", "breath", "a 息", "- breath"]) {
+    assert.deepEqual(phones(alias), ["br"]);
+  }
+  assert.deepEqual(phones("r"), ["r"]);
+  assert.deepEqual(phones("n"), ["n"]);
+  assert.deepEqual(phones("N"), ["N"]);
+  assert.deepEqual(phones("a r"), ["a", "r"]);
+  assert.deepEqual(phones("a ka"), ["k", "a"]);
+  assert.deepEqual(phones("n カ"), ["k", "a"]);
+  assert.throws(() => phones("かC4"), /unsupported Japanese mora/);
+});
+
+test("UTAU aliases plan without warnings and silence resets extenders", () => {
+  for (const alias of ["R", "a R", "a -", "息", "breath", "a 息"]) {
+    const p = plan(track(["あ", alias, "-", "な"]));
+    assert.ok(!("kind" in p));
+    if ("kind" in p) continue;
+    assert.deepEqual(p.phones.filter((p) => p.ownerId === "n2").map((p) => p.phone), phones(alias));
+    assert.deepEqual(p.phones.filter((p) => p.ownerId === "n3").map((p) => p.phone), ["pau"]);
+    assert.deepEqual(p.diagnostics.map((d) => d.ownerId), ["n3"]);
+    const score = finalize(p);
+    assert.equal(score.kind, "neutrino_sinsy_v1");
+    assert.deepEqual(score.rows.filter((r) => r.noteId === "n2").map((r) => r.phoneme), phones(alias));
+  }
+});
+
 test("romanized monographs, digraphs, and trigraphs are accepted", () => {
   assert.deepEqual(phones("ka"), ["k", "a"]);
   assert.deepEqual(phones("SHI"), ["sh", "i"]);

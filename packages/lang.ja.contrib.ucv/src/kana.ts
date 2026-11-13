@@ -192,6 +192,13 @@ function normalizeSurface(input: string): string {
 function isCanonicalPhoneSequence(text: string): boolean {
   return !!text && text.split(/\s+/).every((token) => JA_PHONES.has(token));
 }
+// Case-sensitive: UTAU R is a rest, while canonical r is a consonant.
+const UTAU_TOKENS: ReadonlyMap<string, string> = new Map([
+  ["R", "pau"], ["息", "br"], ["breath", "br"],
+]);
+function resolveUtauToken(text: string): string {
+  return UTAU_TOKENS.get(text) ?? text;
+}
 function stripOpenUtauAliasPrefix(text: string): string {
   const m = text.match(/^(?:[aeiouNn]|-|\*)\s+(.+)$/u);
   return m ? m[1]!.trim() : text;
@@ -231,7 +238,7 @@ export function parseJapaneseLyric(
   previousVowel: string | null = null,
   onSkipped?: (message: string) => void,
 ): Mora[] {
-  let text = normalizeSurface(raw);
+  let text = resolveUtauToken(normalizeSurface(raw));
   if (!text || text === "+" || text === "-") {
     if (!previousVowel) {
       if (!onSkipped) throw new Error("lyric extender has no previous vowel");
@@ -241,14 +248,17 @@ export function parseJapaneseLyric(
     return [{ source: text || "+", phones: [previousVowel] }];
   }
   if (isCanonicalPhoneSequence(text)) return [{ source: text, phones: text.split(/\s+/) }];
-  text = stripOpenUtauAliasPrefix(text);
+  const aliasBody = stripOpenUtauAliasPrefix(text);
+  // A prefixed hyphen is a release, not the standalone lyric extender.
+  text = aliasBody !== text && aliasBody === "-" ? "pau" : resolveUtauToken(aliasBody);
   if (isCanonicalPhoneSequence(text)) return [{ source: text, phones: text.split(/\s+/) }];
   const romanized = parseRomanizedText(text);
   if (romanized) return [{ source: text, phones: romanized }];
   if (onSkipped && /^[\x20-\x7e]+$/.test(text)) {
     const morae: Mora[] = [];
     for (const token of text.split(/\s+/)) {
-      const phones = JA_PHONES.has(token) ? [token] : parseRomanizedToken(token);
+      const resolved = resolveUtauToken(token);
+      const phones = JA_PHONES.has(resolved) ? [resolved] : parseRomanizedToken(resolved);
       if (phones) morae.push({ source: token, phones });
       else onSkipped(`unsupported Japanese phone: ${JSON.stringify(token)}`);
     }

@@ -8,6 +8,9 @@ It converts Japanese lyrics to canonical Japanese Sinsy/NEUTRINO-style phones an
 
 - CV kana: `か` → `k a`
 - VCV alias syntax: `a か` → `k a`, `- あ` → `a`
+- UTAU tokens: `R` → `pau`, `息` / `breath` → `br`, including VCV-prefixed forms
+- release aliases: `a -`, `N -`, `* -` → `pau`; standalone `-` remains a vowel extender
+- case-sensitive canonical phones: `r` stays `r`, `n` stays `n`, `N` stays `N`
 - explicit CVVC fragments: `a k` stays `a k`
 - katakana and NFC-normalized kana
 - `ん` → `N`, `っ` → `cl`
@@ -15,7 +18,8 @@ It converts Japanese lyrics to canonical Japanese Sinsy/NEUTRINO-style phones an
 - explicit `phoneOverride` using the canonical phone inventory
 - explicit `pau`, `sil`, `br` gaps from the authored track
 
-Unsupported morae are errors rather than guesses.
+Voicebank-specific pitch/color suffixes (such as `かC4`) are not stripped or guessed.
+Direct parsing rejects unsupported morae; planning warns and skips unsupported phones.
 
 ## Vowel anchoring
 
