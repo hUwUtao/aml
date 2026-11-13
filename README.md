@@ -23,6 +23,13 @@ Every plugin package declares a `pluginId` in its `package.json`. The root
 `tsdown.config.mts` discovers all packages and writes each artifact to
 `dist/<pluginId>/`.
 
+## Score import contract
+
+Importers return source-local track, note, and gap IDs, not project destinations.
+The host translates them into fresh project identities and new channels. See
+[Import identity contract](docs/import-identity-contract.md) for ownership,
+compatibility, and flag semantics.
+
 ## Minimal standard
 
 - No obfuscated, minified code except dependencies.

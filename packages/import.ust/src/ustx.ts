@@ -46,14 +46,13 @@ export function parseUstx(text: string, filename: string, diagnostics: ImportDia
       return note;
     });
     const trackName = recover(diagnostics, "invalid_metadata", "Using default USTX track name", () => string(sourceTrack.track_name, `tracks[${trackNo}].track_name`, `Track ${trackNo + 1}`), `Track ${trackNo + 1}`);
-    const partName = recover(diagnostics, "invalid_metadata", "Using default USTX part name", () => string(part.name, `voice_parts[${partIndex}].name`, `Part ${partIndex + 1}`), `Part ${partIndex + 1}`);
     const extentEnd = recover(diagnostics, "invalid_metadata", "Ignored invalid USTX part duration", () => {
       const duration = integer(part.duration, `voice_parts[${partIndex}].duration`, 0);
       if (duration < 0 || !Number.isSafeInteger(offset + duration)) throw new Error("USTX part duration is outside the tick range");
       return offset + duration;
     }, offset);
     return makeTrack({
-      id: `${basename}_${trackNo + 1}_${partIndex + 1}`, name: `${trackName} / ${partName}`,
+      id: `${basename}_${trackNo + 1}_${partIndex + 1}`, name: trackName || `Track ${trackNo + 1}`,
       notes: noteInputs, tempos, meters, ppq: resolution, extentEnd,
       source: { format: "ustx", version: root.ustx_version ?? null, projectName: root.name ?? null,
         sourceTrack,

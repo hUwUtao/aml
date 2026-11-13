@@ -124,7 +124,9 @@ export function tickToMs(tick: number, tempos: TempoPoint[], ppq: number): numbe
   return ms + (tick - cursor) * 60000 / (ppq * bpm);
 }
 
-export function makeTrack(input: { id: string; name: string; notes: SourceNote[]; tempos: TempoPoint[]; meters: MeterPoint[]; ppq: number; extentEnd?: number; source: AnyRecord }, diagnostics: ImportDiagnostic[] = []): AuthoredTrack {
+// IDs are source-local to one import result, never destination project selectors.
+// The host scopes each import transaction and translates IDs before committing.
+export function makeTrack(input: { id: string; name: string; notes: SourceNote[]; tempos: TempoPoint[]; meters: MeterPoint[]; ppq: number; extentEnd?: number; source: AnyRecord }, diagnostics: ImportDiagnostic[] = []): AuthoredTrack & { name: string } {
   const notes = input.notes.filter((note, i) => {
     const valid = Number.isSafeInteger(note.start) && Number.isSafeInteger(note.end) && note.start >= 0 && note.end > note.start && Number.isSafeInteger(note.pitch) && note.pitch >= 0 && note.pitch <= 127;
     if (!valid) diagnostics.push({ severity: "warning", code: "skipped_note", message: `Skipped note ${i} in ${input.name}: invalid timing or MIDI pitch` });
@@ -148,7 +150,7 @@ export function makeTrack(input: { id: string; name: string; notes: SourceNote[]
     cursor = note.end;
   }
   if (cursor < extentEnd) gaps.push({ id: `${input.id}:gap:${gaps.length}`, startTick: cursor, endTick: extentEnd, kind: "sil" });
-  return { schema: "amadeus.track/v2", trackId: input.id, ppq: input.ppq, tempoMap: input.tempos, meterMap: input.meters,
+  return { schema: "amadeus.track/v2", trackId: input.id, name: input.name, ppq: input.ppq, tempoMap: input.tempos, meterMap: input.meters,
     extent: { startTick: 0, endTick: extentEnd }, languageRoute: [], notes: authored, gaps,
     extensions: jsonSafe({ source: input.source }) as JsonObject };
 }
